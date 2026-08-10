@@ -13,7 +13,7 @@ ENCODINGS = [
 ]
 
 
-def read(filepath: str | Path, encoding: str | None = None) -> tuple[str, str]:
+def parse(filepath: str | Path, encoding: str | None = None) -> tuple[str, str]:
     filepath = Path(filepath)
     with open(filepath, "rb") as f:
         raw = f.read()

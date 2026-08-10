@@ -3,7 +3,7 @@ from pathlib import Path
 
 from markitdown import MarkItDown
 
-from txt_parser import read
+from txt_parser import parse as parse_txt
 
 MARKITDOWN_EXTENSIONS = {
     ".pdf", ".docx", ".xlsx", ".pptx",
@@ -25,7 +25,7 @@ def parse(filepath: str | Path) -> tuple[str, float]:
         result = _md.convert(str(filepath))
         text = result.text_content
     else:
-        text, _encoding = read(filepath)
+        text, _encoding = parse_txt(filepath)
 
     elapsed = time.perf_counter() - t0
     return text, elapsed
