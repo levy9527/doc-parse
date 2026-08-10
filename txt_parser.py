@@ -14,19 +14,18 @@ ENCODINGS = [
 ]
 
 
-def _detect(raw: bytes) -> str:
-    for enc in ENCODINGS:
-        try:
-            raw.decode(enc)
-            return enc
-        except UnicodeDecodeError:
-            continue
-    return "utf-8"
-
-
 def read_txt(filepath: str | Path, encoding: str | None = None) -> tuple[str, str]:
     filepath = Path(filepath)
     with open(filepath, "rb") as f:
         raw = f.read()
-    enc = encoding or _detect(raw)
-    return raw.decode(enc), enc
+
+    if encoding:
+        return raw.decode(encoding), encoding
+
+    for enc in ENCODINGS:
+        try:
+            return raw.decode(enc), enc
+        except UnicodeDecodeError:
+            continue
+
+    raise ValueError(f"无法识别文件编码: {filepath}")
