@@ -5,11 +5,15 @@ from markitdown import MarkItDown
 from txt_parser import parse as parse_txt
 
 MARKITDOWN_EXTENSIONS = {
-    ".csv",
     ".docx",
-    ".epub",
+    ".csv",
+    ".xls",
+    ".xlsx",
+    ".pptx",
+    ".pdf",
     ".htm",
     ".html",
+    ".epub",
     ".ipynb",
     ".jpg",
     ".jpeg",
@@ -19,14 +23,10 @@ MARKITDOWN_EXTENSIONS = {
     ".mp3",
     ".mp4",
     ".msg",
-    ".pdf",
     ".png",
-    ".pptx",
     ".rss",
     ".atom",
     ".wav",
-    ".xls",
-    ".xlsx",
     ".xml",
     ".zip",
 }
@@ -43,3 +43,21 @@ def parse(filepath: str | Path) -> str:
         return result.text_content
 
     return parse_txt(filepath)[0]
+
+
+if __name__ == "__main__":
+    import argparse
+    import sys
+
+    p = argparse.ArgumentParser(description="解析文档为 Markdown")
+    p.add_argument("filepath", help="输入文件路径")
+    p.add_argument("-o", "--output", help="输出文件路径（默认输出到 stdout）")
+    args = p.parse_args()
+
+    text = parse(args.filepath)
+
+    if args.output:
+        Path(args.output).write_text(text, encoding="utf-8")
+        print(f"已保存: {args.output}", file=sys.stderr)
+    else:
+        print(text)
