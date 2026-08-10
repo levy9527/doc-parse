@@ -1,4 +1,3 @@
-import time
 from pathlib import Path
 
 from markitdown import MarkItDown
@@ -15,17 +14,12 @@ MARKITDOWN_EXTENSIONS = {
 _md = MarkItDown()
 
 
-def parse(filepath: str | Path) -> tuple[str, float]:
+def parse(filepath: str | Path) -> str:
     filepath = Path(filepath)
     ext = filepath.suffix.lower()
 
-    t0 = time.perf_counter()
-
     if ext in MARKITDOWN_EXTENSIONS:
         result = _md.convert(str(filepath))
-        text = result.text_content
-    else:
-        text, _encoding = parse_txt(filepath)
+        return result.text_content
 
-    elapsed = time.perf_counter() - t0
-    return text, elapsed
+    return parse_txt(filepath)[0]
