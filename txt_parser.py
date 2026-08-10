@@ -1,7 +1,17 @@
 from pathlib import Path
 
 
-ENCODINGS = ["utf-8", "gbk", "gb2312", "gb18030", "latin-1"]
+ENCODINGS = [
+    "utf-8",
+    "utf-16",
+    "gb18030",
+    "gbk",
+    "big5",
+    "shift_jis",
+    "euc-jp",
+    "euc-kr",
+    "latin-1",
+]
 
 
 def _detect(raw: bytes) -> str:
