@@ -5,10 +5,30 @@ from markitdown import MarkItDown
 from txt_parser import parse as parse_txt
 
 MARKITDOWN_EXTENSIONS = {
-    ".pdf", ".docx", ".xlsx", ".pptx",
-    ".html", ".htm", ".csv", ".json", ".xml",
-    ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff", ".webp",
-    ".epub", ".zip",
+    ".csv",
+    ".docx",
+    ".epub",
+    ".htm",
+    ".html",
+    ".ipynb",
+    ".jpg",
+    ".jpeg",
+    ".json",
+    ".jsonl",
+    ".m4a",
+    ".mp3",
+    ".mp4",
+    ".msg",
+    ".pdf",
+    ".png",
+    ".pptx",
+    ".rss",
+    ".atom",
+    ".wav",
+    ".xls",
+    ".xlsx",
+    ".xml",
+    ".zip",
 }
 
 _md = MarkItDown()
