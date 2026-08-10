@@ -10,7 +10,6 @@ ENCODINGS = [
     "shift_jis",
     "euc-jp",
     "euc-kr",
-    "latin-1",
 ]
 
 
@@ -28,4 +27,4 @@ def read_txt(filepath: str | Path, encoding: str | None = None) -> tuple[str, st
         except UnicodeDecodeError:
             continue
 
-    raise ValueError(f"无法识别文件编码: {filepath}")
+    return raw.decode("latin-1"), "latin-1"
