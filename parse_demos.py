@@ -7,7 +7,7 @@ ROOT = Path(__file__).parent
 OUT_DIR = ROOT / "out" / "markitdown"
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
-DEMO_FILES = ["demo.docx", "demo.pdf", "demo.pptx", "demo.xlsx"]
+DEMO_FILES = ["demo.docx", "demo.pdf", "demo.pptx", "demo.xlsx", "demo.html"]
 
 md = MarkItDown()
 totals = {}
