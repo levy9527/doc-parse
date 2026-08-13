@@ -3,7 +3,7 @@ import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).parent
-OUT_DIR = ROOT / "out" / "liteparse"
+OUT_DIR = ROOT.parent / "out" / "liteparse"
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
 DEMO_FILES = ["demo.docx", "demo.pdf", "demo.pptx", "demo.xlsx"]
