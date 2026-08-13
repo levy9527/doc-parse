@@ -45,7 +45,7 @@ def parse(filepath: str | Path) -> str:
     return parse_txt(filepath)[0]
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     import argparse
     import sys
 
