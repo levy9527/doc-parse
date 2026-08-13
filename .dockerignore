@@ -1,0 +1,17 @@
+.venv
+__pycache__
+.git
+out
+*.pyc
+
+demo.docx
+demo.pdf
+demo.pptx
+demo.xlsx
+demo.html
+demo.unknown.txt
+demo.utf8.txt
+
+html2docx.py
+parse_demos.py
+parse_demos_liteparse.py
