@@ -4,6 +4,9 @@ from markitdown import MarkItDown
 
 from txt_parser import parse as parse_txt
 
+# 仍交给 markitdown 的扩展（PDF 单独走 OCR 管线；图片走 OCR 转写）
+OCR_IMAGE_EXTS = {".jpg", ".jpeg", ".png"}
+
 MARKITDOWN_EXTENSIONS = {
     ".docx",
     ".csv",
@@ -37,6 +40,20 @@ _md = MarkItDown()
 def parse(filepath: str | Path) -> str:
     filepath = Path(filepath)
     ext = filepath.suffix.lower()
+
+    if ext == ".pdf":
+        from pdf_pipeline import parse_pdf
+
+        return parse_pdf(filepath)
+
+    if ext in OCR_IMAGE_EXTS:
+        from config import SETTINGS
+        import ocr
+
+        if SETTINGS.effective_mode() == "never" or not ocr.available():
+            result = _md.convert(str(filepath))
+            return result.text_content
+        return ocr.ocr_image_text(str(filepath))
 
     if ext in MARKITDOWN_EXTENSIONS:
         result = _md.convert(str(filepath))

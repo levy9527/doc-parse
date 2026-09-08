@@ -4,3 +4,5 @@ out/
 .pytest_cache/
 .coverage
 htmlcov/
+.pi/
+/out/
