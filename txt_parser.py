@@ -3,7 +3,6 @@ from pathlib import Path
 
 ENCODINGS = [
     "utf-8",
-    "utf-16",
     "gb18030",
     "gbk",
     "big5",

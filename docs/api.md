@@ -70,9 +70,27 @@ file=<文件二进制>
 | 邮件 | `.msg` |
 | 压缩包 | `.zip` |
 | 数据 | `.json` `.jsonl` |
-| 图片 | `.jpg` `.jpeg` `.png` |
+| 图片 | `.jpg` `.jpeg` `.png`（OCR 转写） |
 | 音频 / 视频 | `.m4a` `.mp3` `.wav` `.mp4` |
 | 纯文本 | `.txt` 及其它（自动探测编码） |
+
+## OCR / 扫描 PDF 支持
+
+- **PDF**：优先读文字层。存在缺文字页（原生文字 < `PDF_TEXT_MIN_CHARS`，默认 300）
+  或图片主导页时，自动将该页渲染为位图并做 RapidOCR（无文字层页会叠加表格结构识别）。
+  全部为文字页的 PDF 仍走 markitdown，质量不变。
+- **图片**：`.jpg/.jpeg/.png` 直接走 OCR 转写为 Markdown。
+- 无需外部 API，模型 ONNX 在 Docker 构建期预置，运行离线可用。
+
+### OCR 配置（环境变量）
+
+| 环境变量 | 默认 | 说明 |
+| --- | --- | --- |
+| `OCR_MODE` | `auto` | OCR 默认能力，无需开关；`auto`(有缺文字页才 OCR) / `always`(全部 OCR) / `never`(关闭) |
+| `PDF_TEXT_MIN_CHARS` | `300` | 低于此字数的页判定为缺文字页 |
+| `OCR_DPI` | `200` | 渲染分辨率（默认不改） |
+| `TABLE_ENABLED` | `false` | 无文字层页是否做表格重建（慢，按需开启） |
+| `OCR_MODEL_DIR` | 各包默认 | ONNX 模型目录 |
 
 ## 调用示例
 
