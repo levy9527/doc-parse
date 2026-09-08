@@ -93,8 +93,7 @@ PDF 管线：pdfminer 逐页取原生文字量
 
 | 环境变量 | 默认 | 含义 |
 |---|---|---|
-| `OCR_ENABLED` | `true` | OCR 总开关 |
-| `OCR_MODE` | `auto` | `auto`(有缺文字页才 OCR) / `always` / `never` |
+| `OCR_MODE` | `auto` | OCR 为默认能力、无需开关；`auto`(有缺文字页才 OCR) / `always` / `never`(关闭) |
 | `PDF_TEXT_MIN_CHARS` | `300` | 页原生文字低于此值判缺文字页 → OCR。实测：样例文字页最低 852、近空页 0–60，300 可干净切分 |
 | `OCR_DPI` | `200` | 渲染分辨率（保持 200） |
 | `TABLE_ENABLED` | `false` | 是否跑表格重建（慢，需结构时开 `true`） |

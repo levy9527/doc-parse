@@ -27,8 +27,8 @@ def test_settings_from_env(monkeypatch):
 
 
 def test_effective_mode():
-    s = config.Settings(ocr_enabled=False, ocr_mode="always")
-    assert s.effective_mode() == "never"  # 总开关优先
-    s2 = config.Settings(ocr_enabled=True, ocr_mode="bogus")
-    assert s2.effective_mode() == "auto"  # 非法回退 auto
+    # OCR 默认开启(auto)；never 才关闭；非法值回退 auto
+    assert config.Settings().effective_mode() == "auto"
     assert config.Settings(ocr_mode="always").effective_mode() == "always"
+    assert config.Settings(ocr_mode="never").effective_mode() == "never"
+    assert config.Settings(ocr_mode="bogus").effective_mode() == "auto"

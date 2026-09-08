@@ -86,8 +86,7 @@ file=<文件二进制>
 
 | 环境变量 | 默认 | 说明 |
 | --- | --- | --- |
-| `OCR_MODE` | `auto` | `auto` 有缺文字页才 OCR / `always` 全部 OCR / `never` 关闭 |
-| `OCR_ENABLED` | `true` | 总开关 |
+| `OCR_MODE` | `auto` | OCR 默认能力，无需开关；`auto`(有缺文字页才 OCR) / `always`(全部 OCR) / `never`(关闭) |
 | `PDF_TEXT_MIN_CHARS` | `300` | 低于此字数的页判定为缺文字页 |
 | `OCR_DPI` | `200` | 渲染分辨率（默认不改） |
 | `TABLE_ENABLED` | `false` | 无文字层页是否做表格重建（慢，按需开启） |
