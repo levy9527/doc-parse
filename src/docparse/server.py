@@ -7,7 +7,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 
-from doc_parser import parse
+from docparse.doc_parser import parse
 
 app = FastAPI(title="doc-parse", description="文档解析为 Markdown 的 HTTP 服务")
 

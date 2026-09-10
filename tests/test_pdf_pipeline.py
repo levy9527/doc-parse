@@ -6,8 +6,8 @@ from pathlib import Path
 
 from markitdown import MarkItDown
 
-import pdf_pipeline
-from config import SETTINGS
+import docparse.pdf_pipeline as pdf_pipeline
+from docparse.config import SETTINGS
 
 DEMO = Path(__file__).resolve().parent.parent / "demo" / "demo.pdf"
 

@@ -3,7 +3,7 @@ import importlib
 
 import pytest
 
-import config
+import docparse.config as config
 
 
 def test_settings_defaults():
