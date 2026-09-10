@@ -17,6 +17,7 @@ RUN sed -i \
 
 # 源码采用 src 布局：整目录拷贝，新增模块无需再改这里
 COPY pyproject.toml ./
+COPY .env.sample ./
 COPY src/ ./src/
 COPY scripts/ ./scripts/
 

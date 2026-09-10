@@ -147,28 +147,60 @@ def _should_ocr_page(mode: str, raw_len: int, meaningful_len: int) -> bool:
     return _page_needs_ocr(raw_len, meaningful_len)
 
 
+# ---------------------------------------------------------------- 单页处理
+def _render_one_page(args) -> tuple[int, str]:
+    """页级并行的 worker（必须是模块级函数，spawn 模式下要可 pickle）。
+
+    args = (pdf_path, page_index, do_ocr, mode, dpi)；返回 (页码, 该页文本)。
+    """
+    pdf_path, page_index, do_ocr, mode, dpi = args
+    if do_ocr:
+        return page_index, _OCR_BLOCK.format(n=page_index + 1) + _ocr_page_markdown(
+            pdf_path, page_index, dpi
+        )
+    text = _pdfminer_page_text(pdf_path, page_index)
+    if text:
+        return page_index, text
+    if mode == "never":
+        return page_index, _NO_TEXT_BLOCK.format(n=page_index + 1)
+    return page_index, ""
+
+
+def _parse_pages(pdf_path: str | Path, mode: str, plan: list[bool], dpi: int,
+                 workers: int) -> list[str]:
+    """按页处理，返回按页码排好序的文本列表。
+
+    workers > 1 时用多进程并行（每进程独立调用 onnxruntime）。
+    注意：并行收益取决于「单页是否已吃满核」——并行度 ≈ 核数 ÷ 单页线程数。
+    """
+    n = len(plan)
+    jobs = [(str(pdf_path), i, plan[i], mode, dpi) for i in range(n)]
+    if workers <= 1 or n <= 1:
+        results = [_render_one_page(j) for j in jobs]
+    else:
+        import multiprocessing as mp
+        import sys
+
+        # Linux 用 fork（快、可共享父进程已加载的只读页）；macOS/Windows 用 spawn
+        ctx = mp.get_context("fork" if sys.platform.startswith("linux") else "spawn")
+        with ctx.Pool(processes=min(workers, n)) as pool:
+            results = pool.map(_render_one_page, jobs, chunksize=1)
+    results.sort(key=lambda r: r[0])          # 保序：按页码拼接
+    return [text for _, text in results]
+
+
 # ---------------------------------------------------------------- 主入口
 def parse_pdf(pdf_path: str | Path) -> str:
     """返回 Markdown。外部应在文档确实是 PDF 时才调用。
 
     注意：PDF **不走 markitdown**，一律逐页处理（文字页 pdfminer / 缺文字页 OCR）。
+    页数 >1 且 `PDF_WORKERS` >1 时按页并行。
     """
     mode = SETTINGS.effective_mode()
     stats = _page_stats(pdf_path)
-    parts: list[str] = []
-    for i, (raw_len, meaningful_len) in enumerate(stats):
-        if _should_ocr_page(mode, raw_len, meaningful_len):
-            parts.append(
-                _OCR_BLOCK.format(n=i + 1)
-                + _ocr_page_markdown(pdf_path, i, SETTINGS.dpi)
-            )
-        else:
-            text = _pdfminer_page_text(pdf_path, i)
-            if text:
-                parts.append(text)
-            elif mode == "never":
-                parts.append(_NO_TEXT_BLOCK.format(n=i + 1))
-    return _PAGE_BREAK.join(p for p in parts if p)
+    plan = [_should_ocr_page(mode, raw_len, ml) for raw_len, ml in stats]
+    texts = _parse_pages(pdf_path, mode, plan, SETTINGS.dpi, SETTINGS.pdf_workers)
+    return _PAGE_BREAK.join(t for t in texts if t)
 
 
 def needs_ocr_signal(pdf_path: str | Path) -> list[int]:

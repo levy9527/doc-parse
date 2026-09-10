@@ -68,3 +68,36 @@ def test_render_page_uses_pdfium_and_returns_rgb():
     assert isinstance(img, Image.Image)
     assert img.mode == "RGB"
     assert img.size[0] > 100 and img.size[1] > 100
+
+
+def test_parallel_pages_match_serial(monkeypatch):
+    # 页级并行（PDF_WORKERS=2）与串行的输出必须完全一致（含页码顺序）
+    monkeypatch.setattr(pdf_pipeline.SETTINGS, "pdf_workers", 1)
+    serial = pdf_pipeline.parse_pdf(DEMO)
+    monkeypatch.setattr(pdf_pipeline.SETTINGS, "pdf_workers", 2)
+    parallel = pdf_pipeline.parse_pdf(DEMO)
+    assert serial == parallel
+
+
+def test_parallel_ocr_pages_match_serial(monkeypatch, tmp_path):
+    """2 页纯图片 PDF（无文字层 → 全部走 OCR），并行与串行结果必须一致。
+
+    这条覆盖真正的并行 OCR 路径（子进程各自加载引擎）。
+    """
+    from PIL import Image, ImageDraw
+
+    pages = []
+    for i, text in enumerate(("PARALLEL PAGE ONE 111", "PARALLEL PAGE TWO 222")):
+        img = Image.new("RGB", (700, 200), "white")
+        ImageDraw.Draw(img).text((30, 80), text, fill="black")
+        pages.append(img)
+    pdf_path = tmp_path / "imgonly.pdf"
+    pages[0].save(pdf_path, save_all=True, append_images=pages[1:])
+
+    monkeypatch.setattr(pdf_pipeline.SETTINGS, "pdf_workers", 1)
+    serial = pdf_pipeline.parse_pdf(pdf_path)
+    monkeypatch.setattr(pdf_pipeline.SETTINGS, "pdf_workers", 2)
+    parallel = pdf_pipeline.parse_pdf(pdf_path)
+
+    assert "OCR 识别内容" in serial and "OCR 识别内容" in parallel
+    assert serial == parallel

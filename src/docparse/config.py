@@ -2,7 +2,7 @@
 
 所有项都可用同名环境变量覆盖（大写）：
   OCR_MODE, PDF_TEXT_MIN_CHARS, OCR_DPI, TABLE_ENABLED, OCR_MODEL_DIR,
-  OCR_INTRA_THREADS, OCR_INTER_THREADS
+  OCR_INTRA_THREADS, OCR_INTER_THREADS, PDF_WORKERS
 OCR 是默认能力、无需开关；要关闭用 OCR_MODE=never。
 PDF 不走 markitdown；渲染统一用 pypdfium2（无 poppler 依赖）。
 """
@@ -51,6 +51,10 @@ class Settings:
     ocr_intra_threads: int = 8
     # onnxruntime inter-op 线程数（<=0 = 自动）
     ocr_inter_threads: int = 0
+    # 页级并行进程数（1 = 串行）。OCR 单页只用到部分核：Mac 12 核单页已吃满
+    # （CPU≈1300%），并行无益；服务器 96 核单页仅用 ~16 线程，可并行多页。
+    # 约束：pdf_workers × ocr_intra_threads 最好 ≤ 可见核数。
+    pdf_workers: int = 2
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -62,6 +66,7 @@ class Settings:
             model_dir=os.environ.get("OCR_MODEL_DIR") or None,
             ocr_intra_threads=_int_env("OCR_INTRA_THREADS", 8),
             ocr_inter_threads=_int_env("OCR_INTER_THREADS", 0),
+            pdf_workers=_int_env("PDF_WORKERS", 2),
         )
 
     def effective_mode(self) -> str:
