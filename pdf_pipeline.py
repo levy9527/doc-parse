@@ -22,23 +22,39 @@ from config import SETTINGS
 from markitdown import MarkItDown
 import ocr as ocr_mod
 import table_rec as table_mod
+from text_quality import meaningful_length
 
 log = logging.getLogger("docparse.pdf")
 
 _PAGE_BREAK = "\n\n---\n\n"
 _OCR_BLOCK = "\n\n> OCR 识别内容（图片/扫描页，页码 {n}）：\n\n"
 
+# 判为「水印主导页」的噪声占比阈值：原文够长，但去掉噪声后所剩无几
+_WATERMARK_NOISE_RATIO = 0.5
+
 _md = MarkItDown()
 
 
-# ---------------------------------------------------------------- 文字层提取
-def _page_text_lengths(pdf_path: str | Path) -> list[int]:
-    """返回每页原生文字长度。"""
-    lengths = []
+# ---------------------------------------------------------------- 文字层统计
+def _page_stats(pdf_path: str | Path) -> list[tuple[int, int]]:
+    """返回每页 (原始字符数, 去噪后有效字符数)。
+
+    招聘模板 PDF 的可见内容是图片，文字层却残留水印（长 token + 竖排单字符）。
+    原始字符数会被水印撑到阈值以上 → 误判「有文字页」→ 跳过 OCR → 解析出空内容。
+    因此除原始长度外，另算一个去水印后的有效长度，供判定使用。
+    """
+    stats: list[tuple[int, int]] = []
     for page in extract_pages(str(pdf_path)):
-        n = sum(len(c.get_text()) for c in page if isinstance(c, LTTextContainer))
-        lengths.append(n)
-    return lengths
+        text = "".join(
+            c.get_text() for c in page if isinstance(c, LTTextContainer)
+        )
+        stats.append((len(text), meaningful_length(text)))
+    return stats
+
+
+def _page_text_lengths(pdf_path: str | Path) -> list[int]:
+    """返回每页原生文字长度（原始字符数，保留原有语义）。"""
+    return [raw for raw, _ in _page_stats(pdf_path)]
 
 
 def _pdfminer_page_text(pdf_path: str | Path, page_index: int) -> str:
@@ -120,6 +136,26 @@ def _needs_ocr(length: int) -> bool:
     return length < SETTINGS.pdf_text_min_chars
 
 
+def _page_needs_ocr(raw_len: int, meaningful_len: int) -> bool:
+    """该页是否应按「缺文字页」处理（→ OCR）。
+
+    两条判据，取"或"，**只增不减**（不会让原本会 OCR 的页变成不 OCR）：
+      1) 原有规则：原始字符数 < 阈值。
+      2) 新增：水印主导页——原始字符数够长，但去掉水印噪声后有效文字不足阈值，
+         且噪声占比超过 _WATERMARK_NOISE_RATIO。
+    第 2 条专门救「可见内容是图片、文字层只剩水印」的模板 PDF；对正常正文页，
+    去噪损失极小（噪声占比远低于阈值），判定结果与原来一致。
+    """
+    if _needs_ocr(raw_len):
+        return True
+    noise = raw_len - meaningful_len
+    if raw_len <= 0:
+        return False
+    if meaningful_len < SETTINGS.pdf_text_min_chars and noise >= raw_len * _WATERMARK_NOISE_RATIO:
+        return True
+    return False
+
+
 # ---------------------------------------------------------------- 主入口
 def parse_pdf(pdf_path: str | Path) -> str:
     """返回 Markdown。外部应在文档确实是 PDF 时才调用。"""
@@ -128,9 +164,9 @@ def parse_pdf(pdf_path: str | Path) -> str:
         # 强制不 OCR：退回 markitdown
         return _md.convert(str(pdf_path)).text_content
 
-    lengths = _page_text_lengths(pdf_path)
-    n_pages = len(lengths)
-    low_pages = [i for i, n in enumerate(lengths) if _needs_ocr(n)]
+    stats = _page_stats(pdf_path)
+    n_pages = len(stats)
+    low_pages = [i for i, (raw, ml) in enumerate(stats) if _page_needs_ocr(raw, ml)]
 
     if mode == "auto" and not low_pages:
         # 档 A：全文字页，保留 markitdown 质量
@@ -139,7 +175,7 @@ def parse_pdf(pdf_path: str | Path) -> str:
     # 档 B（auto 且存在缺文字页 / 或 always）：逐页拼接
     parts: list[str] = []
     for i in range(n_pages):
-        if _needs_ocr(lengths[i]):
+        if _page_needs_ocr(*stats[i]):
             parts.append(_OCR_BLOCK.format(n=i + 1) + _ocr_page_markdown(pdf_path, i, SETTINGS.dpi))
         else:
             text = _pdfminer_page_text(pdf_path, i)
@@ -150,4 +186,4 @@ def parse_pdf(pdf_path: str | Path) -> str:
 
 def needs_ocr_signal(pdf_path: str | Path) -> list[int]:
     """暴露哪些页被判定为缺文字（供测试/诊断）。"""
-    return [i for i, n in enumerate(_page_text_lengths(pdf_path)) if _needs_ocr(n)]
+    return [i for i, (raw, ml) in enumerate(_page_stats(pdf_path)) if _page_needs_ocr(raw, ml)]
