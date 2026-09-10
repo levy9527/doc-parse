@@ -1,25 +1,29 @@
 """PDF 解析管线：文字层为主，缺文字页回退 OCR + 表格识别。
 
-策略（两档）：
-  档 A  所有页原生文字充足 → 直接用 markitdown 整文档解析（保留现状质量）。
-  档 B  存在缺文字页(低文字/扫描/图片主导) → 逐页拼接：
-         - 文字页：pdfminer 抽文字层（不做 OCR / 图像表格识别）
-         - 缺文字页：渲染为位图 → RapidOCR 正文，命中则叠加表格重建
+策略：**PDF 不再使用 markitdown**。markitdown 会把招聘模板简历的水印竖列/分栏
+误判成 markdown 表格，导致「结构被伪造 + 水印字符与正文粘连」（实测技能词
+`Webpack` 被写成 `Webpackd`，词边界匹配失配）。改为逐页处理：
+    - 文字页  ：pdfminer 抽文字层（不做 OCR / 图像表格识别）
+    - 缺文字页：渲染为位图 → RapidOCR 正文，命中则叠加表格重建
 
-渲染：生产用 poppler(pdftoppm) + pdf2image（避免 MuPDF License）。
-开发环境缺 poppler 时回退 pypdfium2(BSD) 以便本地联调——Docker 有 poppler，走真路径。
+OCR 模式（`OCR_MODE`）：
+    auto   默认，只对「缺文字页」OCR
+    always 每页都强制 OCR（忽略文字层；慢，用于排查/质检）
+    never  完全不 OCR（缺文字页留占位提示）
+
+渲染：pypdfium2（PDFium, BSD）**进程内**渲染——无子进程、无临时文件。
+（原 poppler(pdftoppm)+pdf2image 逐页 fork 子进程 + 临时文件往返，实测比 PDFium
+ 慢约 4.8 倍，已整体移除。）
 """
 from __future__ import annotations
 
 import logging
-import shutil
 from pathlib import Path
 
 from pdfminer.high_level import extract_pages
 from pdfminer.layout import LTTextContainer
 
 from docparse.config import SETTINGS
-from markitdown import MarkItDown
 from docparse import ocr as ocr_mod
 from docparse import table_rec as table_mod
 from docparse.text_quality import meaningful_length
@@ -28,11 +32,10 @@ log = logging.getLogger("docparse.pdf")
 
 _PAGE_BREAK = "\n\n---\n\n"
 _OCR_BLOCK = "\n\n> OCR 识别内容（图片/扫描页，页码 {n}）：\n\n"
+_NO_TEXT_BLOCK = "\n\n> 该页无文字层，且已关闭 OCR（页码 {n}）：\n\n"
 
 # 判为「水印主导页」的噪声占比阈值：原文够长，但去掉噪声后所剩无几
 _WATERMARK_NOISE_RATIO = 0.5
-
-_md = MarkItDown()
 
 
 # ---------------------------------------------------------------- 文字层统计
@@ -67,34 +70,18 @@ def _pdfminer_page_text(pdf_path: str | Path, page_index: int) -> str:
 
 # ---------------------------------------------------------------- 渲染
 def _render_page(pdf_path: str | Path, page_index: int, dpi: int):
-    """渲染指定页为 PIL.Image(模式 RGB)。优先 poppler；缺时回退 pypdfium2(dev)。"""
+    """渲染指定页为 PIL.Image(模式 RGB)：pypdfium2(PDFium) 进程内渲染。
+
+    无子进程、无临时文件；不再使用 poppler。
+    """
+    import pypdfium2 as pdfium
+
+    doc = pdfium.PdfDocument(str(pdf_path))
     try:
-        from pdf2image import convert_from_path
-
-        images = convert_from_path(
-            str(pdf_path), dpi=dpi, first_page=page_index + 1, last_page=page_index + 1
-        )
-        if not images:
-            raise RuntimeError(f"pdftoppm 未渲染出第 {page_index + 1} 页")
-        return images[0].convert("RGB")
-    except Exception as poppler_err:  # pragma: no cover
-        if shutil.which("pdftoppm") is not None:
-            raise
-        # 缺 poppler(本地 dev)：回退 pypdfium2
-        try:
-            import pypdfium2 as pdfium
-
-            doc = pdfium.PdfDocument(str(pdf_path))
-            try:
-                page = doc[page_index]
-                return page.render(scale=dpi / 72.0).to_pil().convert("RGB")
-            finally:
-                doc.close()
-        except Exception:
-            raise RuntimeError(
-                "缺少 poppler(pdftoppm)。Docker 内已 apt 安装 poppler-utils；"
-                f"本地可 brew/apt 安装或安装 pypdfium2。原错误: {poppler_err}"
-            ) from poppler_err
+        page = doc[page_index]
+        return page.render(scale=dpi / 72.0).to_pil().convert("RGB")
+    finally:
+        doc.close()
 
 
 # ---------------------------------------------------------------- 缺文字页 OCR 页
@@ -149,31 +136,38 @@ def _page_needs_ocr(raw_len: int, meaningful_len: int) -> bool:
     return False
 
 
+def _should_ocr_page(mode: str, raw_len: int, meaningful_len: int) -> bool:
+    """本页是否走 OCR。三种模式语义：
+    always → 每页都 OCR；never → 一律不 OCR；auto → 仅「缺文字页」OCR。
+    """
+    if mode == "always":
+        return True
+    if mode == "never":
+        return False
+    return _page_needs_ocr(raw_len, meaningful_len)
+
+
 # ---------------------------------------------------------------- 主入口
 def parse_pdf(pdf_path: str | Path) -> str:
-    """返回 Markdown。外部应在文档确实是 PDF 时才调用。"""
+    """返回 Markdown。外部应在文档确实是 PDF 时才调用。
+
+    注意：PDF **不走 markitdown**，一律逐页处理（文字页 pdfminer / 缺文字页 OCR）。
+    """
     mode = SETTINGS.effective_mode()
-    if mode == "never":
-        # 强制不 OCR：退回 markitdown
-        return _md.convert(str(pdf_path)).text_content
-
     stats = _page_stats(pdf_path)
-    n_pages = len(stats)
-    low_pages = [i for i, (raw, ml) in enumerate(stats) if _page_needs_ocr(raw, ml)]
-
-    if mode == "auto" and not low_pages:
-        # 档 A：全文字页，保留 markitdown 质量
-        return _md.convert(str(pdf_path)).text_content
-
-    # 档 B（auto 且存在缺文字页 / 或 always）：逐页拼接
     parts: list[str] = []
-    for i in range(n_pages):
-        if _page_needs_ocr(*stats[i]):
-            parts.append(_OCR_BLOCK.format(n=i + 1) + _ocr_page_markdown(pdf_path, i, SETTINGS.dpi))
+    for i, (raw_len, meaningful_len) in enumerate(stats):
+        if _should_ocr_page(mode, raw_len, meaningful_len):
+            parts.append(
+                _OCR_BLOCK.format(n=i + 1)
+                + _ocr_page_markdown(pdf_path, i, SETTINGS.dpi)
+            )
         else:
             text = _pdfminer_page_text(pdf_path, i)
             if text:
                 parts.append(text)
+            elif mode == "never":
+                parts.append(_NO_TEXT_BLOCK.format(n=i + 1))
     return _PAGE_BREAK.join(p for p in parts if p)
 
 

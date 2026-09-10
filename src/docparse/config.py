@@ -3,6 +3,7 @@
 所有项都可用同名环境变量覆盖（大写）：
   OCR_MODE, PDF_TEXT_MIN_CHARS, OCR_DPI, TABLE_ENABLED, OCR_MODEL_DIR
 OCR 是默认能力、无需开关；要关闭用 OCR_MODE=never。
+PDF 不走 markitdown；渲染统一用 pypdfium2（无 poppler 依赖）。
 """
 from __future__ import annotations
 
@@ -33,7 +34,7 @@ class Settings:
     ocr_mode: str = "auto"
     # 页原生文字低于该值判为“缺文字页”→ OCR
     pdf_text_min_chars: int = 300
-    # 渲染分辨率（poppler pdftoppm / pdf2image 用）
+    # 渲染分辨率（pypdfium2 光栅化用）
     dpi: int = 200
     # 无文字层页是否尝试表格重建（慢；默认关闭，需结构时用 TABLE_ENABLED=true 开启）
     table_enabled: bool = False

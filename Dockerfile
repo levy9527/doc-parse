@@ -2,7 +2,6 @@ FROM docker.m.daocloud.io/python:3.12-slim
 
 WORKDIR /app
 
-# poppler: pdftoppm/pdftotext/pdfinfo（渲染 + 文字层探测，规避 MuPDF License）
 # libgomp1: onnxruntime 在 slim 上需要
 # libgl1/libglib2.0-0: opencv-python(cv2) 在 slim 上 import 需要 libGL
 # 先切清华 debian 镜像，避免官方源国内 502
@@ -11,7 +10,6 @@ RUN sed -i \
        s|URIs: http://deb.debian.org/debian|URIs: https://mirrors.tuna.tsinghua.edu.cn/debian|' \
       /etc/apt/sources.list.d/debian.sources \
     && apt-get update && apt-get install -y --no-install-recommends \
-      poppler-utils \
       libgomp1 \
       libgl1 \
       libglib2.0-0 \
