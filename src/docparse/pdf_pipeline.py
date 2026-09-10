@@ -52,11 +52,6 @@ def _page_stats(pdf_path: str | Path) -> list[tuple[int, int]]:
     return stats
 
 
-def _page_text_lengths(pdf_path: str | Path) -> list[int]:
-    """返回每页原生文字长度（原始字符数，保留原有语义）。"""
-    return [raw for raw, _ in _page_stats(pdf_path)]
-
-
 def _pdfminer_page_text(pdf_path: str | Path, page_index: int) -> str:
     """用 pdfminer 抽某页文字层。page_index 从 0 起。"""
     parts = []
@@ -149,8 +144,6 @@ def _page_needs_ocr(raw_len: int, meaningful_len: int) -> bool:
     if _needs_ocr(raw_len):
         return True
     noise = raw_len - meaningful_len
-    if raw_len <= 0:
-        return False
     if meaningful_len < SETTINGS.pdf_text_min_chars and noise >= raw_len * _WATERMARK_NOISE_RATIO:
         return True
     return False
