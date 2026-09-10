@@ -1,7 +1,8 @@
 """全局配置：OCR / 表格识别 / PDF 管线参数。
 
 所有项都可用同名环境变量覆盖（大写）：
-  OCR_MODE, PDF_TEXT_MIN_CHARS, OCR_DPI, TABLE_ENABLED, OCR_MODEL_DIR
+  OCR_MODE, PDF_TEXT_MIN_CHARS, OCR_DPI, TABLE_ENABLED, OCR_MODEL_DIR,
+  OCR_INTRA_THREADS, OCR_INTER_THREADS
 OCR 是默认能力、无需开关；要关闭用 OCR_MODE=never。
 PDF 不走 markitdown；渲染统一用 pypdfium2（无 poppler 依赖）。
 """
@@ -40,6 +41,13 @@ class Settings:
     table_enabled: bool = False
     # ONNX 模型根目录；None = 用各包默认（dev 自动下载）
     model_dir: str | None = None
+    # onnxruntime intra-op 线程数（<=0 = 自动）。
+    # 实测「自动」会按可见核数开满线程池，容器里超额订阅反而最慢：
+    #   Mac 12 核 auto=0.936s/页 vs 6 线程=0.468s；服务器 96 核 auto=1.676s vs 16 线程=0.766s
+    # 注意 OMP_NUM_THREADS 对本环境 onnxruntime 无效，必须用本项。
+    ocr_intra_threads: int = 0
+    # onnxruntime inter-op 线程数（<=0 = 自动）
+    ocr_inter_threads: int = 0
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -49,6 +57,8 @@ class Settings:
             dpi=_int_env("OCR_DPI", 200),
             table_enabled=_bool_env("TABLE_ENABLED", False),
             model_dir=os.environ.get("OCR_MODEL_DIR") or None,
+            ocr_intra_threads=_int_env("OCR_INTRA_THREADS", 0),
+            ocr_inter_threads=_int_env("OCR_INTER_THREADS", 0),
         )
 
     def effective_mode(self) -> str:
