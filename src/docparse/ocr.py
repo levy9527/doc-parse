@@ -53,6 +53,24 @@ def available() -> bool:
     return RapidOCR is not None
 
 
+def engine_params() -> dict | None:
+    """按配置生成 RapidOCR 引擎参数。
+
+    线程数很关键：onnxruntime 默认(auto)会按可见核数开线程池，实测在容器里
+    **超额订阅反而最慢**（Mac 12 核：auto 0.936s/页 → intra_op=6 时 0.468s；
+    服务器 96 核：auto 1.676s/页 → intra_op=16 时 0.766s，约 2 倍）。
+    注意 `OMP_NUM_THREADS` 对本环境的 onnxruntime **无效**，必须设这个参数。
+    """
+    from docparse.config import SETTINGS
+
+    params: dict = {}
+    if SETTINGS.ocr_intra_threads > 0:
+        params["EngineConfig.onnxruntime.intra_op_num_threads"] = SETTINGS.ocr_intra_threads
+    if SETTINGS.ocr_inter_threads > 0:
+        params["EngineConfig.onnxruntime.inter_op_num_threads"] = SETTINGS.ocr_inter_threads
+    return params or None
+
+
 def get_engine():
     """懒加载 RapidOCR 单例。"""
     global _engine
@@ -60,8 +78,9 @@ def get_engine():
         return _engine
     if RapidOCR is None:  # pragma: no cover
         raise RuntimeError(f"rapidocr 不可用: {_IMPORT_ERR}")
-    log.info("初始化 RapidOCR 引擎...")
-    _engine = RapidOCR()
+    params = engine_params()
+    log.info("初始化 RapidOCR 引擎... (params=%s)", params)
+    _engine = RapidOCR(params=params) if params else RapidOCR()
     return _engine
 
 
