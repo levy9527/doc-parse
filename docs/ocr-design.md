@@ -104,7 +104,7 @@ PDF 管线：pdfminer 逐页取原生文字量（原始长度 + 去水印后有�
 | `OCR_DPI` | `200` | 渲染分辨率（保持 200） |
 | `TABLE_ENABLED` | `false` | 是否跑表格重建（慢，需结构时开 `true`） |
 | `OCR_MODEL_DIR` | 各包默认 | ONNX 模型目录 |
-| `OCR_INTRA_THREADS` | `0`(自动) | onnxruntime intra-op 线程数。**实测 auto 最慢**（超额订阅）；建议取可见核数的 1/2~1/6（12 核→6，96 核→16）。`OMP_NUM_THREADS` 无效，必须用本项 |
+| `OCR_INTRA_THREADS` | `8` | onnxruntime intra-op 线程数。**实测 auto 最慢**（超额订阅）；建议取可见核数的 1/2~1/6（12 核→6，96 核→16）。`OMP_NUM_THREADS` 无效，必须用本项 |
 | `OCR_INTER_THREADS` | `0`(自动) | onnxruntime inter-op 线程数 |
 
 ---
@@ -208,8 +208,8 @@ PDF 管线：pdfminer 逐页取原生文字量（原始长度 + 去水印后有�
 - 生效的是 `EngineConfig.onnxruntime.intra_op_num_threads`（RapidOCR `params`）。**auto 最慢**：
   它会按可见核数开满线程池，在容器里超额订阅反而拖慢（Mac 12 核 ~2 倍差距；
   服务器 96 核 auto 1.676s vs 16 线程 0.766s，**2.2 倍**）。
-- 通过环境变量 **`OCR_INTRA_THREADS`** 配置（见 §5）。建议值约为可见核数的 **1/2 ~ 1/6**，
-  并按机器实测：本次 12 核 → **6**，96 核 → **16**。线程数过多或过少都变慢。
+- 通过环境变量 **`OCR_INTRA_THREADS`** 配置（见 §5 与 `.env.sample`），**默认 8**（避免 auto 的超额订阅）。
+  建议值约为可见核数的 **1/2 ~ 1/6**，并按机器实测：本次 12 核 → **6**，96 核 → **16**。线程数过多或过少都变慢。
 
 ### 10.4 负载测量的坑（重要）
 

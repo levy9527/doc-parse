@@ -11,7 +11,8 @@ def test_settings_defaults():
     assert s.pdf_text_min_chars == 300
     assert s.ocr_mode == "auto"
     assert s.dpi == 200
-    assert s.table_enabled is False  # 默认关闭，经 TABLE_ENABLED 开启
+    assert s.table_enabled is False
+    assert s.ocr_intra_threads == 8  # 默认 8：避免 onnxruntime auto 的超额订阅
 
 
 def test_settings_from_env(monkeypatch):
@@ -19,11 +20,13 @@ def test_settings_from_env(monkeypatch):
     monkeypatch.setenv("PDF_TEXT_MIN_CHARS", "500")
     monkeypatch.setenv("OCR_DPI", "300")
     monkeypatch.setenv("TABLE_ENABLED", "0")
+    monkeypatch.setenv("OCR_INTRA_THREADS", "16")
     s = config.Settings.from_env()
     assert s.ocr_mode == "always"
     assert s.pdf_text_min_chars == 500
     assert s.dpi == 300
     assert s.table_enabled is False
+    assert s.ocr_intra_threads == 16
 
 
 def test_effective_mode():
