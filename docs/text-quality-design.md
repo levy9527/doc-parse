@@ -1,6 +1,6 @@
 # 文本质量判定（水印噪声识别）— 设计与落地
 
-> 关联实现：`text_quality.py`、`pdf_pipeline.py`（缺文字页判定）
+> 关联实现：`src/docparse/text_quality.py`、`src/docparse/pdf_pipeline.py`（缺文字页判定）
 > 关联决策：本文档**独立**说明"如何识别水印/无意义字符"，不并入 `ocr-design.md`。
 
 ## 1. 背景（真实问题）
@@ -12,7 +12,7 @@
 - 一列竖排单字符：`f`/`~`/`w`/`3`/`n`/`h`…（每个字符一行）
 - 页分隔：`---`
 
-而 `pdf_pipeline.parse_pdf` 判断"某页要不要 OCR"的依据是**该页原生文字长度**，
+而 `docparse.pdf_pipeline.parse_pdf` 判断"某页要不要 OCR"的依据是**该页原生文字长度**，
 于是这类页被水印撑到阈值（`PDF_TEXT_MIN_CHARS=300`）以上 → 被判为"有文字页" →
 **跳过 OCR** → PDFMiner 只抽出水印 → 清洗后**内容为空**。
 
@@ -26,7 +26,7 @@
 3. **只增不减**：新增判据不能让原本会 OCR 的页变成不 OCR（避免回归）。
 4. **按行处理**：PDFMiner 把水印按独立行输出，行是天然且精确的处理粒度。
 
-## 3. 噪声形态识别规则（`text_quality.strip_noise`）
+## 3. 噪声形态识别规则（`docparse.text_quality.strip_noise`）
 
 核心思路：**不尝试"认出这是水印"，而是识别"正常文本不可能长这样"的形态**。
 
@@ -42,7 +42,7 @@
 meaningful_length(text) = 剔除 A/B/C 后，逐行去掉空白字符的字符数之和
 ```
 
-## 4. 缺文字页判定（`pdf_pipeline._page_needs_ocr`）
+## 4. 缺文字页判定（`docparse.pdf_pipeline._page_needs_ocr`）
 
 **双判据取"或"，只增不减：**
 
@@ -100,8 +100,8 @@ if meaningful_len < THRESHOLD and noise >= raw_len * 0.5: # 判据2：新增
 
 | 参数 | 位置 | 默认 | 说明 |
 |---|---|---|---|
-| `PDF_TEXT_MIN_CHARS` | `config.py`（环境变量） | 300 | "缺文字"的绝对门槛 |
-| `_WATERMARK_NOISE_RATIO` | `pdf_pipeline.py` 常量 | 0.5 | 噪声占比闸门 |
+| `PDF_TEXT_MIN_CHARS` | `src/docparse/config.py`（环境变量） | 300 | "缺文字"的绝对门槛 |
+| `_WATERMARK_NOISE_RATIO` | `src/docparse/pdf_pipeline.py` 常量 | 0.5 | 噪声占比闸门 |
 
 ## 8. 已知限制 / 待改进
 

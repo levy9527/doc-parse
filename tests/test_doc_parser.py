@@ -1,4 +1,4 @@
-from doc_parser import MARKITDOWN_EXTENSIONS, parse
+from docparse.doc_parser import MARKITDOWN_EXTENSIONS, parse
 
 
 def test_parse_html(tmp_path):

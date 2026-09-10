@@ -1,7 +1,7 @@
 """表格 HTML→Markdown 与结构门控的纯逻辑测试。"""
 import pytest
 
-import table_rec
+import docparse.table_rec as table_rec
 
 HTML_3x2 = """
 <html><body><table>

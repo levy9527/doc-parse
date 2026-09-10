@@ -1,6 +1,6 @@
 import pytest
 
-from txt_parser import parse
+from docparse.txt_parser import parse
 
 
 def test_parse_utf8(tmp_path):

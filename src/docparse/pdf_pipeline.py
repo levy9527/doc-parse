@@ -18,11 +18,11 @@ from pathlib import Path
 from pdfminer.high_level import extract_pages
 from pdfminer.layout import LTTextContainer
 
-from config import SETTINGS
+from docparse.config import SETTINGS
 from markitdown import MarkItDown
-import ocr as ocr_mod
-import table_rec as table_mod
-from text_quality import meaningful_length
+from docparse import ocr as ocr_mod
+from docparse import table_rec as table_mod
+from docparse.text_quality import meaningful_length
 
 log = logging.getLogger("docparse.pdf")
 

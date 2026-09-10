@@ -17,17 +17,18 @@ RUN sed -i \
       libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt ./
-# 用 uv 安装（快）。uv 仅首次经 tuna pip 装一下；之后所有依赖交给 uv。
+# 源码采用 src 布局：整目录拷贝，新增模块无需再改这里
+COPY pyproject.toml ./
+COPY src/ ./src/
+COPY scripts/ ./scripts/
+
+# 用 uv 安装（快）。uv 仅首次经 tuna pip 装一下；之后依赖 + 包本身都交给 uv。
 ENV UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
     UV_SYSTEM_PYTHON=1 \
     PIP_NO_CACHE_DIR=1
 RUN pip install -q uv \
-    && uv pip install --no-cache -r requirements.txt \
+    && uv pip install --no-cache . \
     && rm -rf /root/.cache/uv
-
-COPY doc_parser.py txt_parser.py config.py ocr.py table_rec.py pdf_pipeline.py server.py ./
-COPY scripts/ ./scripts/
 
 # 离线模型预置：构建期下载并固化 ONNX 模型（运行期不再联网）
 # 注意：当前引擎用各包默认模型缓存路径；此步把模型拷到 /app/models 供审计/后续注入。
@@ -35,4 +36,4 @@ RUN python scripts/download_models.py /app/models || echo "WARN: model download 
 
 EXPOSE 8000
 
-CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "docparse.server:app", "--host", "0.0.0.0", "--port", "8000"]

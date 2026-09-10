@@ -1,5 +1,5 @@
 """text_quality 测试：水印噪声剔除 + 有效长度判定。"""
-from text_quality import meaningful_length, strip_noise
+from docparse.text_quality import meaningful_length, strip_noise
 
 # 真实模板水印：长 token + 竖排单字符 + 符号分隔
 _WATERMARK = """176ee020586f3dd11Hx53NW4EVtWxI6_UPuaWOGjmfXZMxhn3w~~
@@ -67,7 +67,7 @@ def test_long_word_not_treated_as_token():
 
 def test_watermark_dominated_page_is_detected():
     """判定规则：原文够长但几乎全是水印 → 应判为缺文字（走 OCR）。"""
-    import pdf_pipeline
+    import docparse.pdf_pipeline as pdf_pipeline
 
     # 郑露这类：原文 422 字，去掉水印后几乎没有有效文字
     assert pdf_pipeline._page_needs_ocr(422, 8) is True
@@ -75,14 +75,14 @@ def test_watermark_dominated_page_is_detected():
 
 def test_normal_page_is_not_flagged_as_low_text():
     """正常正文页：去噪损失很小 → 不应改变原有判定（仍视为有文字页）。"""
-    import pdf_pipeline
+    import docparse.pdf_pipeline as pdf_pipeline
 
     # demo.pdf 第 5 页这类：原文 338，去噪后仍 285（噪声仅 ~16%）
     assert pdf_pipeline._page_needs_ocr(338, 285) is False
 
 
 def test_short_page_still_uses_original_rule():
-    import pdf_pipeline
+    import docparse.pdf_pipeline as pdf_pipeline
 
     # 原有规则保持不变：原文就低于阈值 → OCR
     assert pdf_pipeline._page_needs_ocr(250, 240) is True

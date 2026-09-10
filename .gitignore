@@ -6,3 +6,7 @@ out/
 htmlcov/
 .pi/
 /out/
+build/
+dist/
+*.egg-info/
+.idea/

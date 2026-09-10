@@ -2,7 +2,7 @@ from pathlib import Path
 
 from markitdown import MarkItDown
 
-from txt_parser import parse as parse_txt
+from docparse.txt_parser import parse as parse_txt
 
 # 仍交给 markitdown 的扩展（PDF 单独走 OCR 管线；图片走 OCR 转写）
 OCR_IMAGE_EXTS = {".jpg", ".jpeg", ".png"}
@@ -42,13 +42,13 @@ def parse(filepath: str | Path) -> str:
     ext = filepath.suffix.lower()
 
     if ext == ".pdf":
-        from pdf_pipeline import parse_pdf
+        from docparse.pdf_pipeline import parse_pdf
 
         return parse_pdf(filepath)
 
     if ext in OCR_IMAGE_EXTS:
-        from config import SETTINGS
-        import ocr
+        from docparse.config import SETTINGS
+        from docparse import ocr
 
         if SETTINGS.effective_mode() == "never" or not ocr.available():
             result = _md.convert(str(filepath))

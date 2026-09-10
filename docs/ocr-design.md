@@ -36,11 +36,11 @@ PDF 原先全走 `markitdown`(0.1.7) 的 pdfminer/pdfplumber 后端——**只�
 ## 3. 总体架构
 
 ```
-doc_parser.parse(filepath)
+docparse.doc_parser.parse(filepath)
    │ 按扩展名路由
-   ├── .pdf            → pdf_pipeline.parse_pdf
-   ├── .jpg/.jpeg/.png → ocr 图片转写
-   └── 其他            → markitdown / txt_parser（不变）
+   ├── .pdf            → docparse.pdf_pipeline.parse_pdf
+   ├── .jpg/.jpeg/.png → docparse.ocr 图片转写
+   └── 其他            → markitdown / docparse.txt_parser（不变）
 
 PDF 管线：pdfminer 逐页取原生文字量
    ├─ 所有页充足 ─►【档A】整体 markitdown（零改动，不做 OCR）
@@ -74,18 +74,18 @@ PDF 管线：pdfminer 逐页取原生文字量
 
 | 文件 | 说明 |
 |---|---|
-| `config.py` | 配置，均可环境变量覆盖（见 §5） |
-| `ocr.py` | RapidOCR 懒加载单例；单次识别、正文/表格共用；几何门控 |
-| `table_rec.py` | `table_cls`→wired/lineless（懒加载）；html→Markdown 表 + 验收门控 |
-| `pdf_pipeline.py` | 档A/B 判定、逐页文字层抽取 / 渲染+OCR+表格、拼接 Markdown |
+| `src/docparse/config.py` | 配置，均可环境变量覆盖（见 §5） |
+| `src/docparse/ocr.py` | RapidOCR 懒加载单例；单次识别、正文/表格共用；几何门控 |
+| `src/docparse/table_rec.py` | `table_cls`→wired/lineless（懒加载）；html→Markdown 表 + 验收门控 |
+| `src/docparse/pdf_pipeline.py` | 档A/B 判定、逐页文字层抽取 / 渲染+OCR+表格、拼接 Markdown |
 | `scripts/download_models.py` | 构建期离线固化 ONNX 模型 + manifest |
-| 修改 | `doc_parser.py`、`requirements.txt`、`Dockerfile`、`docs/api.md` |
+| 修改 | `src/docparse/doc_parser.py`、`pyproject.toml`、`Dockerfile`、`docs/api.md` |
 | 测试 | `tests/test_config.py`、`tests/test_table_rec.py`、`tests/test_pdf_pipeline.py`（17 项通过） |
 
 ### 依赖
 - **apt**：`poppler-utils`（渲染/文字层）、`libgomp1`（onnxruntime）、`libgl1` `libglib2.0-0`（cv2）。
 - **pip/uv**：`rapidocr` + `onnxruntime`（统一包）、`pdf2image`、`wired_table_rec` `lineless_table_rec` `table_cls`；保留 `markitdown[pdf,...]`。
-- **版本**：按 PyPI 实际版本锁定（`requirements.txt` 已固定），避免上游迭代 API 漂移。
+- **版本**：按 PyPI 实际版本锁定（`pyproject.toml` 已固定），避免上游迭代 API 漂移。
 
 ---
 
@@ -116,7 +116,7 @@ PDF 管线：pdfminer 逐页取原生文字量
 - 安装：`poppler-utils libgomp1 libgl1 libglib2.0-0`。
 - 依赖：先 `pip install uv`，后 `uv pip install`（`UV_INDEX_URL`/`UV_SYSTEM_PYTHON` 指向清华源与系统 Python）。
 - 构建期跑 `scripts/download_models.py /app/models` 固化模型。
-- 本地无 poppler 时，`pdf_pipeline` 渲染 dev 回退 pypdfium2（BSD）；Docker 内始终走 poppler。
+- 本地无 poppler 时，`docparse.pdf_pipeline` 渲染 dev 回退 pypdfium2（BSD）；Docker 内始终走 poppler。
 
 ---
 

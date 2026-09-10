@@ -3,5 +3,12 @@ __pycache__
 .git
 out
 *.pyc
+.pytest_cache
+.coverage
+htmlcov
+.pi
+.idea
+.DS_Store
 
 demo
+tests
