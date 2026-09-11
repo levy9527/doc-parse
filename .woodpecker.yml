@@ -1,0 +1,104 @@
+# ============================================================
+# Woodpecker CI 流水线
+#   构建镜像 → Trivy 安全扫描 → 推送到阿里云 ACR
+#
+#   push / tag  → 构建 + 扫描 + 推送
+#   pull_request → 只构建 + 扫描（不推送，避免污染镜像仓库）
+# ============================================================
+
+when:
+  - event: [push, tag]
+    branch: [main, master]
+  - event: pull_request
+
+steps:
+  # ---------------- 1. 构建镜像 ----------------
+  - name: build
+    image: docker:27-cli
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    commands:
+      # ---- 镜像地址配置 ----
+      - export REGISTRY="crpi-hgsnl0in29uk9ris.cn-wulanchabu.personal.cr.aliyuncs.com"
+      # 同区域 ECS 可用 VPC 内网地址，走内网不占公网带宽（更快）：
+      # export REGISTRY="crpi-hgsnl0in29uk9ris-vpc.cn-wulanchabu.personal.cr.aliyuncs.com"
+      - export NAMESPACE="levydotvip"
+      # 每个项目一个独立仓库；ACR 要求仓库名全小写，GitHub 仓库名可能含大写，统一转换
+      - export REPO="$(echo "$CI_REPO_NAME" | tr "[:upper:]" "[:lower:]")"
+      - export IMAGE="$REGISTRY/$NAMESPACE/$REPO"
+      # tag 规则：打了 git tag 用 tag 名，否则用 commit 短 SHA
+      - export TAG="${CI_COMMIT_TAG:-$(echo "$CI_COMMIT_SHA" | cut -c1-8)}"
+      - echo "==> 构建 $IMAGE:$TAG"
+      # ⚠️ 必须关闭 provenance / sbom！
+      #    Docker 默认给镜像附加 attestation 证明层（mediaType
+      #    application/vnd.oci.empty.v1+json），ACR 个人版不接受，会报：
+      #    "error from registry: unknown manifest class for
+      #     application/vnd.oci.empty.v1+json"
+      - docker build --provenance=false --sbom=false -t "$IMAGE:$TAG" -t "$IMAGE:latest" .
+
+  # ---------------- 2. Trivy 安全扫描 ----------------
+  # 发现「有修复版本的」HIGH / CRITICAL 漏洞即失败，带病镜像不会被推送
+  # --ignore-unfixed：忽略官方尚无修复方案的漏洞，避免长期红灯
+  - name: security-scan
+    image: aquasec/trivy:latest
+    environment:
+      # ⚠️ 必须走国内镜像源：Trivy 默认从 ghcr.io 拉漏洞库，
+      #    而实际 blob 会重定向到 pkg-containers.githubusercontent.com，
+      #    在国内服务器上会卡死（实测 5 分钟无任何进展）
+      TRIVY_DB_REPOSITORY: ghcr.m.daocloud.io/aquasecurity/trivy-db
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      # 复用宿主机的漏洞库缓存：首次约 2 分钟，之后每次扫描 <1 秒
+      - /data/ci/trivy-cache:/root/.cache/trivy
+    commands:
+      - export REGISTRY="crpi-hgsnl0in29uk9ris.cn-wulanchabu.personal.cr.aliyuncs.com"
+      - export NAMESPACE="levydotvip"
+      - export REPO="$(echo "$CI_REPO_NAME" | tr "[:upper:]" "[:lower:]")"
+      - export IMAGE="$REGISTRY/$NAMESPACE/$REPO"
+      - export TAG="${CI_COMMIT_TAG:-$(echo "$CI_COMMIT_SHA" | cut -c1-8)}"
+      - echo "==> 扫描 $IMAGE:$TAG"
+      - trivy image
+          --image-src docker
+          --severity HIGH,CRITICAL
+          --ignore-unfixed
+          --no-progress
+          --exit-code 1
+          "$IMAGE:$TAG"
+
+  # ---------------- 3. 推送到阿里云 ACR ----------------
+  - name: push
+    image: docker:27-cli
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      # 【方式A】复用宿主机上已 docker login 的凭证（当前生效）
+      #   在构建机上执行一次 docker login，凭证由 docker daemon 所在主机提供，
+      #   无需把密码存进 CI。
+      - /root/.docker/config.json:/root/.docker/config.json:ro
+    environment:
+      # 【方式B】宿主机未登录时，回退到 Woodpecker Secrets
+      ACR_USERNAME:
+        from_secret: acr_username
+      ACR_PASSWORD:
+        from_secret: acr_password
+    commands:
+      - export REGISTRY="crpi-hgsnl0in29uk9ris.cn-wulanchabu.personal.cr.aliyuncs.com"
+      - export NAMESPACE="levydotvip"
+      - export REPO="$(echo "$CI_REPO_NAME" | tr "[:upper:]" "[:lower:]")"
+      - export IMAGE="$REGISTRY/$NAMESPACE/$REPO"
+      - export TAG="${CI_COMMIT_TAG:-$(echo "$CI_COMMIT_SHA" | cut -c1-8)}"
+      - |
+        if grep -qs "$REGISTRY" /root/.docker/config.json 2>/dev/null; then
+          echo "==> 使用宿主机已有凭证（方式A）"
+        elif [ -n "$ACR_PASSWORD" ]; then
+          echo "==> 使用 Woodpecker Secrets 登录（方式B）"
+          echo "$ACR_PASSWORD" | docker login "$REGISTRY" -u "$ACR_USERNAME" --password-stdin
+        else
+          echo "❌ 没有可用凭证：请在构建机 docker login，或配置 acr_username/acr_password secrets" >&2
+          exit 1
+        fi
+      - docker push "$IMAGE:$TAG"
+      - docker push "$IMAGE:latest"
+      - echo "==> 已推送 $IMAGE:$TAG"
+    when:
+      - event: [push, tag]
+        branch: [main, master]
