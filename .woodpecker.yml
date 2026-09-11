@@ -29,8 +29,9 @@ steps:
       # 每个项目一个独立仓库；ACR 要求仓库名全小写，GitHub 仓库名可能含大写，统一转换
       - export REPO="$(echo "$CI_REPO_NAME" | tr "[:upper:]" "[:lower:]")"
       - export IMAGE="$REGISTRY/$NAMESPACE/$REPO"
-      # tag 规则：打了 git tag 用 tag 名，否则用 commit 短 SHA
-      - export TAG="${CI_COMMIT_TAG:-$(echo "$CI_COMMIT_SHA" | cut -c1-8)}"
+      # tag 规则：打了 git tag 用 tag 名；否则用「日期-commit短SHA」，如 20260911-350a7f5
+      #   容器内没有 tzdata，TZ=Asia/Shanghai 会静默失效，必须用 POSIX 格式 TZ=CST-8
+      - export TAG="${CI_COMMIT_TAG:-$(TZ=CST-8 date +%Y%m%d)-$(echo "$CI_COMMIT_SHA" | cut -c1-8)}"
       - echo "==> 构建 $IMAGE:$TAG"
       # ⚠️ 必须关闭 provenance / sbom！
       #    Docker 默认给镜像附加 attestation 证明层（mediaType
@@ -58,7 +59,7 @@ steps:
       - export NAMESPACE="levydotvip"
       - export REPO="$(echo "$CI_REPO_NAME" | tr "[:upper:]" "[:lower:]")"
       - export IMAGE="$REGISTRY/$NAMESPACE/$REPO"
-      - export TAG="${CI_COMMIT_TAG:-$(echo "$CI_COMMIT_SHA" | cut -c1-8)}"
+      - export TAG="${CI_COMMIT_TAG:-$(TZ=CST-8 date +%Y%m%d)-$(echo "$CI_COMMIT_SHA" | cut -c1-8)}"
       - echo "==> 扫描 $IMAGE:$TAG"
       - trivy image
           --image-src docker
@@ -88,7 +89,7 @@ steps:
       - export NAMESPACE="levydotvip"
       - export REPO="$(echo "$CI_REPO_NAME" | tr "[:upper:]" "[:lower:]")"
       - export IMAGE="$REGISTRY/$NAMESPACE/$REPO"
-      - export TAG="${CI_COMMIT_TAG:-$(echo "$CI_COMMIT_SHA" | cut -c1-8)}"
+      - export TAG="${CI_COMMIT_TAG:-$(TZ=CST-8 date +%Y%m%d)-$(echo "$CI_COMMIT_SHA" | cut -c1-8)}"
       - |
         if grep -qs "$REGISTRY" /root/.docker/config.json 2>/dev/null; then
           echo "==> 使用宿主机已有凭证（方式A）"
