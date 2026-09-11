@@ -2,14 +2,17 @@
 # Woodpecker CI 流水线
 #   构建镜像 → Trivy 安全扫描 → 推送到阿里云 ACR
 #
-#   push / tag  → 构建 + 扫描 + 推送
-#   pull_request → 只构建 + 扫描（不推送，避免污染镜像仓库）
+#   触发条件：仅在代码合并进主干（push 到 main / master）或打 tag 时构建。
+#   PR 与特性分支不触发构建，避免无效构建。
+#
+#   注意：本流水线使用了 volumes（挂载 docker socket），
+#   需在仓库设置中开启 Trusted → Volumes，否则会被 linter 拒绝：
+#   "Insufficient trust level to use `volumes`"
 # ============================================================
 
 when:
   - event: [push, tag]
     branch: [main, master]
-  - event: pull_request
 
 steps:
   # ---------------- 1. 构建镜像 ----------------
@@ -99,6 +102,3 @@ steps:
       - docker push "$IMAGE:$TAG"
       - docker push "$IMAGE:latest"
       - echo "==> 已推送 $IMAGE:$TAG"
-    when:
-      - event: [push, tag]
-        branch: [main, master]
