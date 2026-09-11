@@ -1,0 +1,105 @@
+# ============================================================
+# Woodpecker CI 流水线
+#   构建镜像 → Trivy 安全扫描 → 推送到阿里云 ACR
+#
+#   触发条件：仅在代码合并进主干（push 到 main / master）或打 tag 时构建。
+#   PR 与特性分支不触发构建，避免无效构建。
+#
+#   注意：本流水线使用了 volumes（挂载 docker socket），
+#   需在仓库设置中开启 Trusted → Volumes，否则会被 linter 拒绝：
+#   "Insufficient trust level to use `volumes`"
+# ============================================================
+
+when:
+  - event: [push, tag]
+    branch: [main, master]
+
+steps:
+  # ---------------- 1. 构建镜像 ----------------
+  - name: build
+    image: docker:27-cli
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    commands:
+      # ---- 镜像地址配置 ----
+      # 用 VPC 内网端点：走阿里云内网，不受 ECS 公网带宽（实测 ~1.2MB/s）限制。
+      # 推 2GB 镜像时公网端点会 net/http timeout，必须用内网端点。
+      - export REGISTRY="crpi-hgsnl0in29uk9ris-vpc.cn-wulanchabu.personal.cr.aliyuncs.com"
+      - export NAMESPACE="levydotvip"
+      # 每个项目一个独立仓库；ACR 要求仓库名全小写，GitHub 仓库名可能含大写，统一转换
+      - export REPO="$(echo "$CI_REPO_NAME" | tr "[:upper:]" "[:lower:]")"
+      - export IMAGE="$REGISTRY/$NAMESPACE/$REPO"
+      # tag 规则：打了 git tag 用 tag 名；否则用「日期-commit短SHA」，如 20260911-350a7f5
+      #   容器内没有 tzdata，TZ=Asia/Shanghai 会静默失效，必须用 POSIX 格式 TZ=CST-8
+      - export TAG="${CI_COMMIT_TAG:-$(TZ=CST-8 date +%Y%m%d)-$(echo "$CI_COMMIT_SHA" | cut -c1-8)}"
+      - echo "==> 构建 $IMAGE:$TAG"
+      # ⚠️ 必须关闭 provenance / sbom！
+      #    Docker 默认给镜像附加 attestation 证明层（mediaType
+      #    application/vnd.oci.empty.v1+json），ACR 个人版不接受，会报：
+      #    "error from registry: unknown manifest class for
+      #     application/vnd.oci.empty.v1+json"
+      - docker build --provenance=false --sbom=false -t "$IMAGE:$TAG" -t "$IMAGE:latest" .
+
+  # ---------------- 2. Trivy 安全扫描 ----------------
+  # 发现「有修复版本的」HIGH / CRITICAL 漏洞即失败，带病镜像不会被推送
+  # --ignore-unfixed：忽略官方尚无修复方案的漏洞，避免长期红灯
+  - name: security-scan
+    image: aquasec/trivy:latest
+    environment:
+      # ⚠️ 必须走国内镜像源：Trivy 默认从 ghcr.io 拉漏洞库，
+      #    而实际 blob 会重定向到 pkg-containers.githubusercontent.com，
+      #    在国内服务器上会卡死（实测 5 分钟无任何进展）
+      TRIVY_DB_REPOSITORY: ghcr.m.daocloud.io/aquasecurity/trivy-db
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      # 复用宿主机的漏洞库缓存：首次约 2 分钟，之后每次扫描 <1 秒
+      - /data/ci/trivy-cache:/root/.cache/trivy
+    commands:
+      # 用 VPC 内网端点：走阿里云内网，不受 ECS 公网带宽（实测 ~1.2MB/s）限制。
+      # 推 2GB 镜像时公网端点会 net/http timeout，必须用内网端点。
+      - export REGISTRY="crpi-hgsnl0in29uk9ris-vpc.cn-wulanchabu.personal.cr.aliyuncs.com"
+      - export NAMESPACE="levydotvip"
+      - export REPO="$(echo "$CI_REPO_NAME" | tr "[:upper:]" "[:lower:]")"
+      - export IMAGE="$REGISTRY/$NAMESPACE/$REPO"
+      - export TAG="${CI_COMMIT_TAG:-$(TZ=CST-8 date +%Y%m%d)-$(echo "$CI_COMMIT_SHA" | cut -c1-8)}"
+      - echo "==> 扫描 $IMAGE:$TAG"
+      - trivy image
+          --image-src docker
+          --severity HIGH,CRITICAL
+          --ignore-unfixed
+          --no-progress
+          --exit-code 1
+          "$IMAGE:$TAG"
+
+  # ---------------- 3. 推送到阿里云 ACR ----------------
+  - name: push
+    image: docker:27-cli
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      # 复用构建机上已 docker login 的凭证（在构建机执行一次 docker login 即可），
+      # 密码不落 CI。
+      #
+      # 注意：此处刻意不引用 Woodpecker Secrets —— 引用未创建的 secret 会让
+      # 流水线在校验阶段直接失败（secret "xxx" not found）。
+      # 若日后改用 Secrets 登录，先在「仓库设置 → Secrets」建好
+      # acr_username / acr_password，再补回 environment 与下面的分支。
+      - /root/.docker/config.json:/root/.docker/config.json:ro
+    commands:
+      # 用 VPC 内网端点：走阿里云内网，不受 ECS 公网带宽（实测 ~1.2MB/s）限制。
+      # 推 2GB 镜像时公网端点会 net/http timeout，必须用内网端点。
+      - export REGISTRY="crpi-hgsnl0in29uk9ris-vpc.cn-wulanchabu.personal.cr.aliyuncs.com"
+      - export NAMESPACE="levydotvip"
+      - export REPO="$(echo "$CI_REPO_NAME" | tr "[:upper:]" "[:lower:]")"
+      - export IMAGE="$REGISTRY/$NAMESPACE/$REPO"
+      - export TAG="${CI_COMMIT_TAG:-$(TZ=CST-8 date +%Y%m%d)-$(echo "$CI_COMMIT_SHA" | cut -c1-8)}"
+      - |
+        if grep -qs "$REGISTRY" /root/.docker/config.json 2>/dev/null; then
+          echo "==> 使用构建机已有凭证"
+        else
+          echo "❌ 构建机上没有 $REGISTRY 的登录凭证。" >&2
+          echo "   请在构建机执行：docker login $REGISTRY" >&2
+          exit 1
+        fi
+      - docker push "$IMAGE:$TAG"
+      - docker push "$IMAGE:latest"
+      - echo "==> 已推送 $IMAGE:$TAG"
