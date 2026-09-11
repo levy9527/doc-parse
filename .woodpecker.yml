@@ -74,16 +74,14 @@ steps:
     image: docker:27-cli
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      # 【方式A】复用宿主机上已 docker login 的凭证（当前生效）
-      #   在构建机上执行一次 docker login，凭证由 docker daemon 所在主机提供，
-      #   无需把密码存进 CI。
+      # 复用构建机上已 docker login 的凭证（在构建机执行一次 docker login 即可），
+      # 密码不落 CI。
+      #
+      # 注意：此处刻意不引用 Woodpecker Secrets —— 引用未创建的 secret 会让
+      # 流水线在校验阶段直接失败（secret "xxx" not found）。
+      # 若日后改用 Secrets 登录，先在「仓库设置 → Secrets」建好
+      # acr_username / acr_password，再补回 environment 与下面的分支。
       - /root/.docker/config.json:/root/.docker/config.json:ro
-    environment:
-      # 【方式B】宿主机未登录时，回退到 Woodpecker Secrets
-      ACR_USERNAME:
-        from_secret: acr_username
-      ACR_PASSWORD:
-        from_secret: acr_password
     commands:
       - export REGISTRY="crpi-hgsnl0in29uk9ris.cn-wulanchabu.personal.cr.aliyuncs.com"
       - export NAMESPACE="levydotvip"
@@ -92,12 +90,10 @@ steps:
       - export TAG="${CI_COMMIT_TAG:-$(TZ=CST-8 date +%Y%m%d)-$(echo "$CI_COMMIT_SHA" | cut -c1-8)}"
       - |
         if grep -qs "$REGISTRY" /root/.docker/config.json 2>/dev/null; then
-          echo "==> 使用宿主机已有凭证（方式A）"
-        elif [ -n "$ACR_PASSWORD" ]; then
-          echo "==> 使用 Woodpecker Secrets 登录（方式B）"
-          echo "$ACR_PASSWORD" | docker login "$REGISTRY" -u "$ACR_USERNAME" --password-stdin
+          echo "==> 使用构建机已有凭证"
         else
-          echo "❌ 没有可用凭证：请在构建机 docker login，或配置 acr_username/acr_password secrets" >&2
+          echo "❌ 构建机上没有 $REGISTRY 的登录凭证。" >&2
+          echo "   请在构建机执行：docker login $REGISTRY" >&2
           exit 1
         fi
       - docker push "$IMAGE:$TAG"
